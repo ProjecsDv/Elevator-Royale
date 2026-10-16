@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>ELEVATOR ROYALE</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:Arial Black}
+body{background:#000;overflow:hidden;touch-action:none}
+#ui{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10}
+#topBar{display:flex;justify-content:space-between;padding:12px;background:linear-gradient(#000,#0000);color:#fff}
+#timer{font-size:28px;text-shadow:0 0 10px #ff0}
+#controls{position:absolute;bottom:0;left:0;width:100%;display:flex;justify-content:space-between;padding:14px;pointer-events:auto}
+.btn{width:86px;height:86px;border-radius:50%;border:3px solid #fff;color:#fff;font-weight:900;font-size:12px;background:#333}
+.btn:disabled{opacity:0.3}
+#push{background:radial-gradient(#ff3d00,#900)}
+#punch{background:radial-gradient(#ffeb3b,#a80);color:#000}
+#kick{background:radial-gradient(#00e5ff,#005)}
+#elevatorUI{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;text-align:center;background:#000c;padding:30px;border:2px solid #ff0}
+#winScreen{position:absolute;top:0;left:0;width:100%;height:100%;background:#000e;color:#fff;display:none;align-items:center;justify-content:center;flex-direction:column;z-index:20}
+</style>
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js"}}</script>
+</head>
+<body>
+<div id="ui">
+<div id="topBar"><div>ROOFTOP 1<br><span id="alive">6 vivos</span></div><div id="timer">ELEVADOR...</div><div>PLAYER</div></div>
+<div id="controls"><div style="color:#fff">ARRASTA PRA ANDAR</div><div style="display:flex;gap:8px"><button class="btn" id="push" disabled>EMPURRAR</button><button class="btn" id="punch" disabled>SOCO</button><button class="btn" id="kick" disabled>CHUTE</button></div></div>
+<div id="elevatorUI"><h1>ELEVATOR ROYALE</h1><p>4-6 PLAYERS<br>Subindo...</p></div>
+<div id="winScreen"><h1 id="winText">VENCEU!</h1><button onclick="location.reload()" style="padding:14px 30px;background:#ff0;border:none;font-weight:900">JOGAR DE NOVO</button></div>
+</div>
+<script type="module">
+import * as THREE from 'three';
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x87CEEB);
+const camera=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,0.1,200);
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;document.body.appendChild(renderer.domElement);
+scene.add(new THREE.AmbientLight(0xffffff,0.7));const sun=new THREE.DirectionalLight(0xffffff,1);sun.position.set(20,40,20);scene.add(sun);
+const buildingSize=24;
+const floor=new THREE.Mesh(new THREE.BoxGeometry(buildingSize,2,buildingSize),new THREE.MeshStandardMaterial({color:0x333333}));floor.position.y=0;scene.add(floor);
+const elevGroup=new THREE.Group();const elevBox=new THREE.Mesh(new THREE.BoxGeometry(4,4,4),new THREE.MeshStandardMaterial({color:0x111111}));elevGroup.add(elevBox);elevGroup.position.set(0,-20,0);scene.add(elevGroup);
+function makePlayer(color,isPlayer){const g=new THREE.Group();const body=new THREE.Mesh(new THREE.CapsuleGeometry(0.4,1,4,8),new THREE.MeshStandardMaterial({color}));body.position.y=1;g.add(body);g.userData={vel:new THREE.Vector3(),alive:true,isPlayer,hp:100,stun:0};return g;}
+const player=makePlayer(0x00ff00,true);scene.add(player);
+const bots=[];const colors=[0xff0000,0x0000ff,0xff00ff,0xffff00,0xff8800];
+for(let i=0;i<5;i++){const b=makePlayer(colors[i],false);b.position.set((Math.random()-0.5)*6,0,(Math.random()-0.5)*6);bots.push(b);scene.add(b);}
+let players=[player,...bots];
+let state='elevator',elevY=-20,countdown=10,canAttack=false,keys={},moveX=0,moveZ=0;
+function resetPositions(){players.forEach(p=>{p.position.set((Math.random()-0.5)*18,0.1,(Math.random()-0.5)*18);p.userData.vel.set(0,0,0);p.userData.alive=true;p.visible=true;});}
+const pushBtn=document.getElementById('push'),punchBtn=document.getElementById('punch'),kickBtn=document.getElementById('kick');
+renderer.domElement.addEventListener('touchmove',e=>{const t=e.touches[0];const cx=innerWidth*0.15,cy=innerHeight*0.85;moveX=(t.clientX-cx)/50;moveZ=(t.clientY-cy)/50;});
+renderer.domElement.addEventListener('touchend',()=>{moveX=0;moveZ=0});
+window.addEventListener('keydown',e=>keys[e.key.toLowerCase()]=true);window.addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+function doAttack(type){if(!canAttack||state!=='fight')return;let range=type==='push'?2.2:1.5;let force=type==='push'?12:type==='kick'?8:4;players.forEach(p=>{if(p===player||!p.userData.alive)return;if(p.position.distanceTo(player.position)<range){const dir=p.position.clone().sub(player.position).normalize();dir.y=0.2;p.userData.vel.add(dir.multiplyScalar(force));if(type!=='push'){p.userData.hp-=type==='kick'?35:20;if(p.userData.hp<=0)p.userData.alive=false;}p.scale.set(1.2,0.8,1.2);setTimeout(()=>p.scale.set(1,1,1),150);}});if(type==='push'){pushBtn.disabled=true;setTimeout(()=>pushBtn.disabled=false,1200);}}
+pushBtn.onclick=()=>doAttack('push');punchBtn.onclick=()=>doAttack('punch');kickBtn.onclick=()=>doAttack('kick');
+function updateBots(dt){if(state!=='fight')return;bots.forEach(b=>{if(!b.userData.alive)return;if(b.userData.stun>0){b.userData.stun-=dt;return;}let target=player.userData.alive?player:bots.find(x=>x!==b&&x.userData.alive)||player;let dir=target.position.clone().sub(b.position);dir.y=0;if(dir.length()>0.5){dir.normalize().multiplyScalar(0.02);b.userData.vel.add(dir);}if(b.position.distanceTo(target.position)<1.6&&Math.random()<0.03){const d=target.position.clone().sub(b.position).normalize();target.userData.vel.add(d.multiplyScalar(10));target.userData.stun=0.4;}});}
+function checkDeath(){players.forEach(p=>{if(!p.userData.alive)return;if(Math.abs(p.position.x)>buildingSize/2+0.5||Math.abs(p.position.z)>buildingSize/2+0.5||p.position.y<-5){p.userData.alive=false;p.visible=false;if(p===player){document.getElementById('winText').innerText='CAIU! PERDEU';document.getElementById('winScreen').style.display='flex';state='lose';}}});const alive=players.filter(p=>p.userData.alive).length;document.getElementById('alive').innerText=alive+' vivos';if(state==='fight'&&alive===1&&player.userData.alive){document.getElementById('winScreen').style.display='flex';state='win';}}
+let last=performance.now();
+function animate(t){requestAnimationFrame(animate);const dt=(t-last)/1000;last=t;
+if(state==='elevator'){elevY+=dt*6;elevGroup.position.y=elevY;camera.position.set(0,elevY+2,8);camera.lookAt(0,elevY,0);if(elevY>=2){state='countdown';elevGroup.visible=false;resetPositions();document.getElementById('elevatorUI').style.display='none';}}
+else if(state==='countdown'){countdown-=dt;document.getElementById('timer').innerText=Math.ceil(countdown)+'s';if(countdown<=0){state='fight';canAttack=true;pushBtn.disabled=false;punchBtn.disabled=false;kickBtn.disabled=false;document.getElementById('timer').innerText='LUTEM!';}}
+else if(state==='fight'){let mx=moveX,mz=moveZ;if(keys['w'])mz=-1;if(keys['s'])mz=1;if(keys['a'])mx=-1;if(keys['d'])mx=1;if(player.userData.stun<=0){player.userData.vel.x+=mx*0.25;player.userData.vel.z+=mz*0.25;}else player.userData.stun-=dt;updateBots(dt);players.forEach(p=>{if(!p.userData.alive)return;p.position.add(p.userData.vel.clone().multiplyScalar(dt));p.userData.vel.multiplyScalar(0.92);if(p.position.y>0.1)p.position.y-=dt*8;else p.position.y=0.1;});checkDeath();camera.position.lerp(new THREE.Vector3(player.position.x,10,player.position.z+14),0.05);camera.lookAt(player.position);}
+renderer.render(scene,camera);}
+animate(performance.now());
+</script>
+</body>
+</html>
